@@ -1,0 +1,92 @@
+# pipelines/ci.yml
+#
+# WHY THIS FILE EXISTS
+# ────────────────────
+# This GitHub Actions workflow automates the full QA Agent pipeline on every
+# push / pull-request.  It:
+#
+#   1. Checks out the code.
+#   2. Installs Python dependencies and Playwright browsers.
+#   3. Runs the QA Agent (main.py) which reads the codebase, generates tests,
+#      and executes them.
+#   4. Uploads the HTML and JSON reports as workflow artifacts.
+#   5. Fails the pipeline if any test fails.
+#
+# FALLBACK MODEL NOTE
+# ───────────────────
+# The agent is configured with primary=gpt-4o and fallbacks=claude-3-5-sonnet
+# + gpt-4o-mini.  Both OPENAI_API_KEY and ANTHROPIC_API_KEY are passed as
+# GitHub secrets so the fallback chain works even if one provider has an outage.
+
+name: QA Agent Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:   # allow manual trigger
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  qa-agent:
+    name: Run QA Agent
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # ── Checkout ─────────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── Python ───────────────────────────────────────────────────────────────
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      # ── Playwright ───────────────────────────────────────────────────────────
+      - name: Install Playwright browsers
+        run: playwright install --with-deps chromium
+
+      # ── Start application under test ─────────────────────────────────────────
+      - name: Start application (background)
+        run: |
+          # Replace with your actual start command, e.g.:
+          # cd project_under_test && npm start &
+          echo "No app to start in this example."
+        continue-on-error: true
+
+      # ── Run QA Agent ─────────────────────────────────────────────────────────
+      - name: Run QA Agent
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python main.py --config config/settings.yaml
+
+      # ── Upload reports ───────────────────────────────────────────────────────
+      - name: Upload test reports
+        if: always()   # upload even when tests fail
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-reports-${{ github.run_number }}
+          path: |
+            reports/latest_report.html
+            reports/latest_report.json
+            reports/logs/
+          retention-days: 30
+
+      # ── Upload screenshots on failure ─────────────────────────────────────────
+      - name: Upload failure screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failure-screenshots-${{ github.run_number }}
+          path: reports/screenshots/
+          retention-days: 7

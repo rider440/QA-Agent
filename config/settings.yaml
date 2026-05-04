@@ -1,0 +1,77 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# settings.yaml
+#
+# WHY THIS FILE EXISTS:
+#   Central configuration for the entire QA Agent.  All runtime behaviour
+#   (which models to try, where to write files, how tests are executed) is
+#   controlled here so that nothing is hard-coded inside Python modules.
+#   A single YAML file also makes it trivial to swap out values in CI/CD
+#   pipelines via environment-variable substitution.
+# ──────────────────────────────────────────────────────────────────────────────
+
+# ── LLM / Model settings ──────────────────────────────────────────────────────
+llm:
+  # Primary model attempted on every request.
+  primary:
+    provider: google
+    model: gemini-2.5-flash
+    temperature: 0.7
+    max_tokens: 409600
+
+  # Fallback chain – tried in order when the primary model fails.
+  fallbacks:
+    - provider: grok
+      model: Grok 4.20
+      temperature: 0.7
+      max_tokens: 409600
+    - provider: openrouter
+      model: anthropic/claude-3.5-sonnet
+      temperature: 0.7
+      max_tokens: 409600
+    - provider: anthropic
+      model: claude-3-5-sonnet-20241022
+      temperature: 0.7
+      max_tokens: 409600
+
+  # How many times to retry a single provider before moving to the next.
+  retry_attempts: 2
+  retry_delay_seconds: 2
+
+# ── Agent behaviour ───────────────────────────────────────────────────────────
+agent:
+  # Maximum planning / execution loop iterations.
+  max_iterations: 10
+  # Verbose LangChain agent logging.
+  verbose: true
+
+# ── Paths ─────────────────────────────────────────────────────────────────────
+paths:
+  project_under_test: E:\Own Project\Login
+  tests_generated: ./tests_generated
+  reports: ./reports
+  logs: ./reports/logs
+
+# ── Test generation ───────────────────────────────────────────────────────────
+test_generation:
+  # Which kinds of tests to auto-generate.
+  generate_api_tests: true
+  generate_ui_tests: true
+  # Base URL of the application under test (used in Playwright tests).
+  base_url: "http://localhost:3000"
+  # Concurrency and rate limiting for LLM generation (avoid 429 RESOURCE_EXHAUSTED)
+  max_concurrency: 1
+  rate_limit_delay_seconds: 15
+
+# ── Playwright ────────────────────────────────────────────────────────────────
+playwright:
+  browser: chromium          # chromium | firefox | webkit
+  headless: false
+  slow_mo_ms: 0
+  timeout_ms: 50000
+  screenshot_on_failure: true
+
+# ── Reporting ─────────────────────────────────────────────────────────────────
+reporting:
+  html_report: true
+  json_report: true
+  console_summary: true
