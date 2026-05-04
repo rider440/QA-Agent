@@ -1,5 +1,8 @@
 from __future__ import annotations
- 
+from agent.prompts.api_ui_analysis_prompt import API_TEST_SYSTEM
+from agent.prompts.System_promt import System_Prompt
+from agent.prompts.api_ui_analysis_prompt import UI_TEST_SYSTEM
+
 import asyncio
 import hashlib
 import logging
@@ -97,23 +100,10 @@ def fake():
  
 # ── LLM system prompts ────────────────────────────────────────────────────────
  
-API_TEST_SYSTEM = (
-    "You are a senior Python QA engineer. "
-    "Write a pytest test function for the API endpoint described. "
-    "Use the `httpx` library for HTTP calls. "
-    "Import `httpx` and use `BASE_URL` from conftest. "
-    "Add clear docstrings and assertions. "
-    "Return ONLY the Python function code, no markdown fences, no imports header "
-    "(imports will be added automatically)."
-)
+API_TEST_SYSTEM = API_TEST_SYSTEM
  
-UI_TEST_SYSTEM = (
-    "You are a senior QA engineer expert in Playwright (Python). "
-    "Write a single pytest test function that uses the `page` fixture from conftest. "
-    "Use the `fake` fixture (from the faker library) to generate any necessary realistic test data for filling out forms. "
-    "The function should navigate to the page, perform the described action, and assert the result. "
-    "Return ONLY the Python function code, no markdown fences."
-)
+UI_TEST_SYSTEM = UI_TEST_SYSTEM
+
  
 FILE_HEADER = '''"""
 {filename}
@@ -223,42 +213,50 @@ class TestGenerator:
         await self._write(conftest_path, conftest_content)
         written.append(str(conftest_path))
  
-        # Semaphore to avoid triggering 429 RESOURCE_EXHAUSTED (especially on free tiers)
-        max_concurrency = self.settings.get("test_generation", {}).get("max_concurrency", 3)
-        delay = self.settings.get("test_generation", {}).get("rate_limit_delay_seconds", 0)
+        # Semaphore and retry logic to avoid triggering 429 RESOURCE_EXHAUSTED
+        max_concurrency = self.settings.get("test_generation", {}).get("max_concurrency", 1)
+        delay = self.settings.get("test_generation", {}).get("rate_limit_delay_seconds", 15)
         sem = asyncio.Semaphore(max_concurrency)
 
-        async def _generate_api_bounded(tc):
-            async with sem:
-                result = await self._generate_api_test(tc)
-                if delay > 0:
-                    await asyncio.sleep(delay)
-                return result
+        async def _run_with_retry(func, tc, max_retries=5):
+            backoff = 60
+            for attempt in range(max_retries):
+                try:
+                    async with sem:
+                        result = await func(tc)
+                        if delay > 0:
+                            await asyncio.sleep(delay)
+                        return result
+                except Exception as e:
+                    err_str = str(e).upper()
+                    if any(x in err_str for x in ["429", "RESOURCE_EXHAUSTED", "503"]):
+                        logger.warning(f"Quota hit or service busy. Waiting {backoff}s before retry (Attempt {attempt+1}/{max_retries})...")
+                        await asyncio.sleep(backoff)
+                        backoff *= 2
+                    else:
+                        raise e
+            raise Exception(f"Failed to generate test after {max_retries} attempts.")
 
-        # API tests – run with bounded concurrency
+        # API tests
         if self.settings["test_generation"]["generate_api_tests"]:
-            api_tasks = [_generate_api_bounded(tc) for tc in plan.api_tests]
-            api_results: list[tuple[str, str]] = await asyncio.gather(*api_tasks)
+            api_tasks = [_run_with_retry(self._generate_api_test, tc) for tc in plan.api_tests]
+            api_results = await asyncio.gather(*api_tasks)
             for filename, content in api_results:
                 path = self.out_dir / "api" / filename
                 await self._write(path, content)
                 written.append(str(path))
- 
-        async def _generate_ui_bounded(tc):
-            async with sem:
-                result = await self._generate_ui_test(tc)
-                if delay > 0:
-                    await asyncio.sleep(delay)
-                return result
 
         # UI tests
         if self.settings["test_generation"]["generate_ui_tests"]:
-            ui_tasks = [_generate_ui_bounded(tc) for tc in plan.ui_tests]
-            ui_results: list[tuple[str, str]] = await asyncio.gather(*ui_tasks)
+            ui_tasks = [_run_with_retry(self._generate_ui_test, tc) for tc in plan.ui_tests]
+            ui_results = await asyncio.gather(*ui_tasks)
             for filename, content in ui_results:
                 path = self.out_dir / "ui" / filename
                 await self._write(path, content)
                 written.append(str(path))
+
+        logger.info("Generator: wrote %d files.", len(written))
+        return written
  
         logger.info("Generator: wrote %d files.", len(written))
         return written

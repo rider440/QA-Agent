@@ -21,21 +21,21 @@ llm:
   # Fallback chain – tried in order when the primary model fails.
   fallbacks:
     - provider: grok
-      model: Grok 4.20
+      model: grok-beta
       temperature: 0.7
-      max_tokens: 409600
+      max_tokens: 4096
     - provider: openrouter
       model: anthropic/claude-3.5-sonnet
       temperature: 0.7
-      max_tokens: 409600
-    - provider: anthropic
-      model: claude-3-5-sonnet-20241022
+      max_tokens: 4096
+    - provider: openai
+      model: gpt-4o-mini
       temperature: 0.7
-      max_tokens: 409600
+      max_tokens: 4096
 
   # How many times to retry a single provider before moving to the next.
-  retry_attempts: 2
-  retry_delay_seconds: 2
+  retry_attempts: 3
+  retry_delay_seconds: 5
 
 # ── Agent behaviour ───────────────────────────────────────────────────────────
 agent:

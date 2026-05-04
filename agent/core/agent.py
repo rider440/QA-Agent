@@ -45,13 +45,6 @@ def _build_llm(provider: str, model: str, temperature: float,
             max_tokens=max_tokens,
             max_retries=kwargs.get("max_retries", 2),
         )
-    elif provider == "anthropic":
-        return ChatAnthropic(
-            model=model,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            max_retries=kwargs.get("max_retries", 2),
-        )
     elif provider == "google":
         from langchain_google_genai import ChatGoogleGenerativeAI
         return ChatGoogleGenerativeAI(
@@ -169,7 +162,7 @@ class QAAgent:
           5. Return a summary dict.
         """
         if project_path:
-            self.reader.project_path = Path(project_path)
+            self.reader.project_path = project_path
  
         logger.info("Step 1/4 - Reading codebase ...")
         codebase_summary = await self.reader.read_async()

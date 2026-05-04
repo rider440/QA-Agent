@@ -41,11 +41,6 @@ class CodebaseReader:
  
     def _iter_source_files(self) -> list[Path]:
         """Return all readable source files under project_path."""
-        if self.project_path.is_file():
-            if self.project_path.suffix in READABLE_EXTENSIONS or self.project_path.suffix == "":
-                return [self.project_path]
-            return []
-
         files: list[Path] = []
         for root, dirs, filenames in os.walk(self.project_path):
             # Skip common noise directories

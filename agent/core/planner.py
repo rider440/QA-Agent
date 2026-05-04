@@ -10,6 +10,8 @@ from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
  
+from agent.prompts.System_promt import System_Prompt
+ 
 logger = logging.getLogger(__name__)
  
  
@@ -50,12 +52,17 @@ class TestPlanner:
     """
  
     SYSTEM_PROMPT = (
-        "You are an expert QA engineer. "
-        "Given a codebase summary, produce a JSON test plan with two keys:\n"
+        f"{System_Prompt}\n\n"
+        "---"
+        "\n\n### 💡 PLANNER INSTRUCTIONS\n"
+        "As the Planner, your job is to analyze the codebase summary and produce a structured JSON test plan.\n"
+        "The JSON MUST have the following keys:\n"
         "  • api_tests  – list of API endpoint tests\n"
         "  • ui_tests   – list of Playwright UI tests\n"
         "  • summary    – one-paragraph description of your plan\n\n"
-        "Return ONLY valid JSON, no markdown fences."
+        "Return ONLY valid JSON, no markdown fences. "
+        "Ignore the 'OUTPUT FORMAT' section in the rules above for this specific task, "
+        "as you are generating the input for the next agent."
     )
  
     def __init__(self, llm: BaseChatModel):
